@@ -9,5 +9,5 @@ for n in pftun keepawake; do
     rm -f $LD/com.mali.$n.plist
 done
 [ -x $BIN/pftun ] && $BIN/pftun del
-rm -f $BIN/pftun $BIN/pftun-vpnid $BIN/hotspot.py $BIN/keepawake.py $BIN/socksd.py $BIN/hshold.py
+rm -f $BIN/pftun $BIN/pftun-vpnid $BIN/misctl $BIN/hotspot.py $BIN/keepawake.py $BIN/socksd.py $BIN/hshold.py
 echo "removed (logs stay in $J/var/log)"

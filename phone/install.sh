@@ -14,6 +14,10 @@ command -v python3 >/dev/null || apt-get install -y -o Acquire::Retries=5 python
 mkdir -p $BIN $J/var/log
 for f in hotspot keepawake socksd hshold; do cp $D/$f.py $BIN/$f.py; chmod 755 $BIN/$f.py; done
 daemons="keepawake"
+M=$D/tools/misctl
+[ -x "$M" ] || M=/var/mobile/pfb/misctl
+if [ -x "$M" ]; then cp $M $BIN/misctl; chmod 755 $BIN/misctl
+else echo "no misctl binary (built by pftun/build.sh): hshold cannot keep an idle hotspot from stopping"; fi
 
 if [ "$1" = "--pftun" ]; then
     P=$D/pftun/pftun
