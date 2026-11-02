@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+mkdir -p /var/jb/var/log
+if command -v launchctl >/dev/null 2>&1; then
+ launchctl bootstrap system /var/jb/Library/LaunchDaemons/com.mali.keepawake.plist 2>/dev/null || true
+ launchctl kickstart -k system/com.mali.keepawake 2>/dev/null || true
+fi
+launchctl bootstrap system /var/jb/Library/LaunchDaemons/com.hotspotprobe.keepalive.panel.plist 2>/dev/null || true
+launchctl kickstart -k system/com.hotspotprobe.keepalive.panel 2>/dev/null || true
+exit 0
