@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.mali.keepawake</string>
+<key>ProgramArguments</key><array><string>/var/jb/usr/bin/python3</string><string>/var/jb/usr/local/bin/keepawake.py</string></array>
+<key>EnvironmentVariables</key><dict>
+<key>KEEPAWAKE_ON_AC</key><string>0</string>
+<key>KEEPAWAKE_CHILDREN</key><string>hshold</string>
+</dict>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>/var/jb/var/log/keepawake.log</string>
+<key>StandardErrorPath</key><string>/var/jb/var/log/keepawake.log</string>
+</dict></plist>
