@@ -1,8 +1,67 @@
-name: Build keepalive
+name: Build iOS Hotspot Keepalive DEB
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/keepalive-deb.yml'
+permissions:
+  contents: write
 jobs:
-  status:
-    runs-on: ubuntu-latest
+  compile:
+    runs-on: macos-latest
     steps:
-      - run: echo 'Preparing release'
+      - uses: actions/checkout@v4
+      - name: Compile and sign iOS misctl
+        run: |
+          set -eux
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 -Wall -Wextra phone/tools/misctl.c -o misctl
+          brew install ldid
+          ldid -Spackaging/misctl.xml misctl
+          file misctl
+          ldid -e misctl | grep 'com.apple.wifi.manager-access'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-misctl
+          path: misctl
+  package:
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-misctl
+          path: out
+      - name: Build rootless DEB
+        run: |
+          set -eux
+          mkdir -p stage/DEBIAN stage/var/jb/usr/local/bin stage/var/jb/Library/LaunchDaemons stage/var/jb/var/log
+          for n in hotspot keepawake hshold socksd; do cp "phone/$n.py" "stage/var/jb/usr/local/bin/$n.py"; done
+          cp out/misctl stage/var/jb/usr/local/bin/misctl
+          cp packaging/panel.py stage/var/jb/usr/local/bin/keepalive-panel.py
+          cp packaging/keepalive.plist stage/var/jb/Library/LaunchDaemons/com.mali.keepawake.plist
+          cp packaging/panel.plist stage/var/jb/Library/LaunchDaemons/com.hotspotprobe.keepalive.panel.plist
+          cp packaging/control stage/DEBIAN/control
+          cp packaging/postinst stage/DEBIAN/postinst
+          cp packaging/prerm stage/DEBIAN/prerm
+          chmod 755 stage/DEBIAN/postinst stage/DEBIAN/prerm stage/var/jb/usr/local/bin/misctl stage/var/jb/usr/local/bin/*.py
+          python3 -m py_compile stage/var/jb/usr/local/bin/*.py
+          find stage -type d -name __pycache__ -exec rm -rf {} +
+          dpkg-deb --build --root-owner-group stage ios-hotspot-keepalive_0.2.0_iphoneos-arm64.deb
+          dpkg-deb --info ios-hotspot-keepalive_0.2.0_iphoneos-arm64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hotspot-Keepalive-v0.2.0-DEB
+          path: ios-hotspot-keepalive_0.2.0_iphoneos-arm64.deb
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=ios-hotspot-keepalive-v0.2.0
+          FILE=ios-hotspot-keepalive_0.2.0_iphoneos-arm64.deb
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" --clobber
+          else
+            gh release create "$TAG" "$FILE" --title "Hotspot Keepalive v0.2.0" --notes "Experimental rootless package using forked upstream sources. Maintains v0.1 keepalive behavior, includes SOCKS5/HTTP proxy source (disabled) and a read-only Safari status panel at http://127.0.0.1:8765 on the hotspot phone. Does not enable VPN routing/pftun. Requires python3 and client Wi-Fi sync pairing. Not tested on iPhone 6s iOS 15."
+          fi
