@@ -1,0 +1,4 @@
+#!/bin/sh
+if command -v launchctl >/dev/null 2>&1; then launchctl bootout system/com.mali.keepawake 2>/dev/null || true; fi
+launchctl bootout system/com.hotspotprobe.keepalive.panel 2>/dev/null || true
+exit 0
