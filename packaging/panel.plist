@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Label</key><string>com.hotspotprobe.keepalive.panel</string><key>ProgramArguments</key><array><string>/var/jb/usr/bin/python3</string><string>/var/jb/usr/local/bin/keepalive-panel.py</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardErrorPath</key><string>/var/jb/var/log/keepalive-panel.log</string></dict></plist>
