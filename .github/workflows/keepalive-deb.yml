@@ -1,0 +1,8 @@
+name: Build keepalive
+on:
+  workflow_dispatch:
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Preparing release'
