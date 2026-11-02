@@ -1,0 +1,8 @@
+Package: com.hotspotprobe.keepalive
+Name: Hotspot Keepalive
+Version: 0.2.0
+Architecture: iphoneos-arm64
+Maintainer: HotspotProbe
+Depends: python3
+Section: Networking
+Description: Keep hotspot running and maintain locked client connectivity with optional local diagnostic dashboard. VPN router is not enabled.
