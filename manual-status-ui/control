@@ -1,0 +1,8 @@
+Package: com.chatin.classicmanual.ui
+Name: Classic Keepawake Settings UI
+Version: 1.6.0
+Architecture: iphoneos-arm64
+Maintainer: Classic Manual
+Section: Tweaks
+Depends: preferenceloader
+Description: Rootless iOS 15 Settings interface for Classic Manual runtime status.

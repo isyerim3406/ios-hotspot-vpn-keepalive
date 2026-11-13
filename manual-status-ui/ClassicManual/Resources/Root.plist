@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><array>
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Classic Keepawake</string><key>footerText</key><string>Orijinal Classic dosyaları değişmez. Anahtar kapatıldığında motor, panel ve yardımcı süreçler durdurulur. Respring gerekmez.</string></dict>
+<dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>Manuel Aç / Kapat</string><key>get</key><string>readSwitch:</string><key>set</key><string>setSwitch:specifier:</string><key>default</key><true/></dict>
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>GERÇEK ÇALIŞMA DURUMU</string><key>footerText</key><string>Bilgiler anahtar değerinden değil root kontrol servisinin launchctl ve süreç denetiminden gelir. Sonuç doğrulanamazsa açıkça belirtilir. Sadece bu ekran açıkken yenilenir.</string></dict>
+<dict><key>cell</key><string>PSTitleValueCell</string><key>label</key><string>Sonuç</string><key>get</key><string>readResult:</string></dict>
+<dict><key>cell</key><string>PSTitleValueCell</string><key>label</key><string>Classic motoru</string><key>get</key><string>readEngine:</string></dict>
+<dict><key>cell</key><string>PSTitleValueCell</string><key>label</key><string>Classic paneli</string><key>get</key><string>readPanel:</string></dict>
+<dict><key>cell</key><string>PSTitleValueCell</string><key>label</key><string>Python süreçleri</string><key>get</key><string>readProcesses:</string></dict>
+<dict><key>cell</key><string>PSTitleValueCell</string><key>label</key><string>Kontrol ayrıntısı</string><key>get</key><string>readDetail:</string></dict>
+</array></plist>

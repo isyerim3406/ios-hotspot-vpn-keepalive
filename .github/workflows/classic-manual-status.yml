@@ -1,0 +1,32 @@
+name: Build Classic Manual Settings UI
+on:
+  push:
+    branches:
+      - classic-manual-status-ui
+    paths:
+      - 'manual-status-ui/**'
+      - '.github/workflows/classic-manual-status.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: waruhachi/theos-action@v2.4.10
+        with:
+          theos-src: theos/theos
+          theos-branch: master
+          sdks-src: theos/sdks
+          sdks-branch: master
+          libgcuniversal: false
+          altlist: false
+          comet: false
+          orion: false
+      - name: Build preference bundle
+        working-directory: manual-status-ui
+        run: make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClassicManual-UI-rootless
+          path: manual-status-ui/packages/*.deb
+          if-no-files-found: error
