@@ -1,60 +1,144 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
-static NSString *const Pref=@"/var/mobile/Library/Preferences/com.chatin.classicmanual.plist";
-static NSString *const State=@"/var/mobile/classic-manual-status.plist";
-@interface CMRootListController : UITableViewController
-@property (nonatomic,strong) NSTimer *timer;
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#import <Preferences/PSTableCell.h>
+
+static NSString *const CMPreferencesPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.plist";
+static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist";
+
+@interface CMRootListController : PSListController
+@property (nonatomic, retain) NSTimer *cmStatusTimer;
 @end
+
 @implementation CMRootListController
-- (instancetype)init { return [super initWithStyle:UITableViewStyleGrouped]; }
-- (void)viewDidLoad { [super viewDidLoad]; self.title=@"Classic Keepawake"; }
-- (NSDictionary *)prefs { return [NSDictionary dictionaryWithContentsOfFile:Pref] ?: @{}; }
-- (NSDictionary *)state { return [NSDictionary dictionaryWithContentsOfFile:State] ?: @{}; }
-- (BOOL)enabled { id v=[self prefs][@"enabled"]; return [v isKindOfClass:NSNumber.class] ? [v boolValue] : YES; }
-- (BOOL)current:(NSDictionary *)s {
- NSDictionary *p=[self prefs]; id r=p[@"revision"], sr=s[@"revision"], v=s[@"requested"];
- return [r isKindOfClass:NSString.class] && [sr isKindOfClass:NSString.class] &&
- [r isEqualToString:sr] && [v isKindOfClass:NSNumber.class] && [v boolValue]==[self enabled];
+
+- (NSArray *)specifiers {
+    if (_specifiers) return _specifiers;
+    NSMutableArray *items = [NSMutableArray array];
+    PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+    [group setProperty:@"Orijinal Classic motoru değiştirilmez. Anahtara dokununca servislerin gerçek durumu kontrol edilir." forKey:@"footerText"];
+    [items addObject:group];
+    PSSpecifier *toggle = [PSSpecifier preferenceSpecifierNamed:@"Classic Aç / Kapat"
+        target:self set:@selector(cmSetEnabled:specifier:)
+        get:@selector(cmGetEnabled:) detail:nil
+        cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
+    [toggle setProperty:@YES forKey:@"default"];
+    [items addObject:toggle];
+
+    PSSpecifier *statusGroup = [PSSpecifier emptyGroupSpecifier];
+    [statusGroup setProperty:@"Durum anahtar değerinden değil, root servisinin launchctl ve süreç kontrolünden okunur. Bilinmeyen durum doğrulanmış sayılmaz." forKey:@"footerText"];
+    [items addObject:statusGroup];
+
+    NSArray *names = @[@"Sonuç", @"Classic motoru", @"Classic paneli", @"Python süreçleri", @"Kontrol ayrıntısı"];
+    NSArray *selectors = @[@"cmGetResult:", @"cmGetEngine:", @"cmGetPanel:", @"cmGetProcesses:", @"cmGetDetails:"];
+    for (NSUInteger i = 0; i < names.count; ++i) {
+        PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:names[i]
+            target:self set:nil get:NSSelectorFromString(selectors[i])
+            detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
+        [items addObject:spec];
+    }
+    _specifiers = [items mutableCopy];
+    return _specifiers;
 }
-- (void)viewWillAppear:(BOOL)a { [super viewWillAppear:a]; [self.tableView reloadData];
- [self.timer invalidate]; self.timer=[NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(refresh:) userInfo:nil repeats:YES]; }
-- (void)viewWillDisappear:(BOOL)a { [self.timer invalidate]; self.timer=nil; [super viewWillDisappear:a]; }
-- (void)refresh:(NSTimer *)t { [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone]; }
-- (void)toggle:(UISwitch *)s {
- NSDictionary *d=@{@"enabled":@(s.on),@"revision":[[NSUUID UUID] UUIDString]};
- if (![d writeToFile:Pref atomically:YES]) { s.on=!s.on;
- UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Kaydetme hatası" message:@"Anahtar kaydedilemedi." preferredStyle:UIAlertControllerStyleAlert];
- [a addAction:[UIAlertAction actionWithTitle:@"Tamam" style:UIAlertActionStyleDefault handler:nil]];
- [self presentViewController:a animated:YES completion:nil]; return; }
- CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),CFSTR("com.chatin.classicmanual/preferences.changed"),NULL,NULL,true);
- [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
+
+- (void)viewDidLoad { [super viewDidLoad]; self.title = @"Classic Keepawake"; }
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.cmStatusTimer invalidate];
+    self.cmStatusTimer = [NSTimer scheduledTimerWithTimeInterval:1.5
+        target:self selector:@selector(cmRefresh:) userInfo:nil repeats:YES];
 }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)t { return 2; }
-- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return s==0?1:5; }
-- (NSString *)tableView:(UITableView *)t titleForHeaderInSection:(NSInteger)s { return s==0?@"MANUEL KONTROL":@"GERÇEK ÇALIŞMA DURUMU"; }
-- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s {
- return s==0?@"Orijinal Classic değişmez. Respring gerekmez.":@"Sonuç root servis denetiminden okunur, anahtar değerinden tahmin edilmez."; }
-- (NSString *)job:(id)v { if (![v isKindOfClass:NSString.class])return @"Bilinmiyor";
- if([v isEqualToString:@"running"])return @"Çalışıyor"; if([v isEqualToString:@"loaded"])return @"Yüklü";
- if([v isEqualToString:@"stopped"])return @"Durduruldu";return @"Bilinmiyor"; }
-- (NSString *)value:(NSInteger)n { NSDictionary *s=[self state];
- if(![self current:s])return @"Kontrol ediliyor…";
- if([s[@"phase"] isEqualToString:@"applying"])return @"Uygulanıyor…";
- switch(n) {
- case 0:return [s[@"verified"] boolValue]?([self enabled]?@"Açık — doğrulandı":@"Kapalı — doğrulandı"):@"Doğrulanamadı";
- case 1:return [self job:s[@"engine"]];case 2:return [self job:s[@"panel"]];
- case 3:{id v=s[@"pythonCount"];return [v isKindOfClass:NSNumber.class]?[NSString stringWithFormat:@"%@ süreç",v]:@"Bilinmiyor";}
- case 4:{id v=s[@"message"];return [v isKindOfClass:NSString.class]&&[v length]?v:@"—";}
- }return @"—"; }
-- (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)p {
- UITableViewCell *c=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
- c.selectionStyle=UITableViewCellSelectionStyleNone;
- if(p.section==0){c.textLabel.text=@"Classic Aç / Kapat";UISwitch *sw=[[UISwitch alloc]initWithFrame:CGRectZero];
- sw.on=[self enabled];[sw addTarget:self action:@selector(toggle:) forControlEvents:UIControlEventValueChanged];c.accessoryView=sw;
- }else{NSArray *a=@[@"Sonuç",@"Classic motoru",@"Classic paneli",@"Python süreçleri",@"Kontrol ayrıntısı"];
- c.textLabel.text=a[p.row];c.detailTextLabel.text=[self value:p.row];
- c.detailTextLabel.adjustsFontSizeToFitWidth=YES;c.detailTextLabel.minimumScaleFactor=0.65;}
- return c;
+- (void)viewWillDisappear:(BOOL)animated {
+    [self.cmStatusTimer invalidate];
+    self.cmStatusTimer = nil;
+    [super viewWillDisappear:animated];
+}
+- (void)dealloc { [self.cmStatusTimer invalidate]; }
+
+- (void)cmRefresh:(NSTimer *)timer { [self reloadSpecifiers]; }
+
+- (NSDictionary *)cmPreferences {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:CMPreferencesPath];
+    return [prefs isKindOfClass:[NSDictionary class]] ? prefs : @{};
+}
+- (NSDictionary *)cmStatus {
+    NSDictionary *state = [NSDictionary dictionaryWithContentsOfFile:CMStatusPath];
+    return [state isKindOfClass:[NSDictionary class]] ? state : @{};
+}
+- (BOOL)cmEnabled {
+    NSNumber *n = [self cmPreferences][@"enabled"];
+    return [n isKindOfClass:NSNumber.class] ? n.boolValue : YES;
+}
+- (id)cmGetEnabled:(PSSpecifier *)specifier { return @([self cmEnabled]); }
+
+- (void)cmSetEnabled:(id)value specifier:(PSSpecifier *)specifier {
+    BOOL enabled = [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : NO;
+    NSDictionary *prefs = @{@"enabled": @(enabled), @"revision": [[NSUUID UUID] UUIDString]};
+    if (![prefs writeToFile:CMPreferencesPath atomically:YES]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ayar kaydedilemedi"
+            message:@"Classic durumunu değiştiremedim. Anahtarı yeniden dene."
+            preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Tamam"
+            style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        [self reloadSpecifiers];
+        return;
+    }
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+        CFSTR("com.chatin.classicmanual/preferences.changed"), NULL, NULL, true);
+    [self reloadSpecifiers];
+}
+
+- (BOOL)cmCurrent:(NSDictionary *)status {
+    NSDictionary *prefs = [self cmPreferences];
+    id expected = prefs[@"revision"];
+    id actual = status[@"revision"];
+    id requested = status[@"requested"];
+    return [expected isKindOfClass:NSString.class] &&
+       [actual isKindOfClass:NSString.class] &&
+       [expected isEqualToString:actual] &&
+       [requested isKindOfClass:NSNumber.class] &&
+       [requested boolValue] == [self cmEnabled];
+}
+- (BOOL)cmWaiting:(NSDictionary *)s {
+    return ![self cmCurrent:s] || [s[@"phase"] isEqualToString:@"applying"];
+}
+- (NSString *)cmJob:(id)value {
+    if (![value isKindOfClass:NSString.class]) return @"Bilinmiyor";
+    if ([value isEqualToString:@"running"]) return @"Çalışıyor";
+    if ([value isEqualToString:@"loaded"]) return @"Yüklü (PID yok)";
+    if ([value isEqualToString:@"stopped"]) return @"Durduruldu";
+    return @"Bilinmiyor";
+}
+- (id)cmGetResult:(PSSpecifier *)specifier {
+    NSDictionary *s = [self cmStatus];
+    if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    if ([s[@"verified"] boolValue])
+        return [self cmEnabled] ? @"Açık — doğrulandı" : @"Kapalı — doğrulandı";
+    return @"Doğrulanamadı";
+}
+- (id)cmGetEngine:(PSSpecifier *)specifier {
+    NSDictionary *s = [self cmStatus];
+    return [self cmWaiting:s] ? @"Kontrol ediliyor…" : [self cmJob:s[@"engine"]];
+}
+- (id)cmGetPanel:(PSSpecifier *)specifier {
+    NSDictionary *s = [self cmStatus];
+    return [self cmWaiting:s] ? @"Kontrol ediliyor…" : [self cmJob:s[@"panel"]];
+}
+- (id)cmGetProcesses:(PSSpecifier *)specifier {
+    NSDictionary *s = [self cmStatus];
+    if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    id n = s[@"pythonCount"];
+    return [n isKindOfClass:NSNumber.class] ?
+        [NSString stringWithFormat:@"%@ süreç", n] : @"Bilinmiyor";
+}
+- (id)cmGetDetails:(PSSpecifier *)specifier {
+    NSDictionary *s = [self cmStatus];
+    if ([self cmWaiting:s]) return @"Durum bekleniyor";
+    id message = s[@"message"];
+    return [message isKindOfClass:NSString.class] ? message : @"Bilinmiyor";
 }
 @end
