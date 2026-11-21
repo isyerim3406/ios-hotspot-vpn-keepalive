@@ -6,7 +6,8 @@
 #import <Preferences/PSTableCell.h>
 
 static NSString *const CMPreferencesPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.plist";
-static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist";
+static NSString *const CMStatusPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.status.plist";
+static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-status.plist";
 
 @interface CMRootListController : PSListController
 @property (nonatomic, retain) NSTimer *cmStatusTimer;
@@ -75,6 +76,9 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
 }
 - (NSDictionary *)cmStatus {
     NSDictionary *state = [NSDictionary dictionaryWithContentsOfFile:CMStatusPath];
+    if (![state isKindOfClass:[NSDictionary class]]) {
+        state = [NSDictionary dictionaryWithContentsOfFile:CMStatusFallbackPath];
+    }
     return [state isKindOfClass:[NSDictionary class]] ? state : @{};
 }
 - (BOOL)cmEnabled {
@@ -129,7 +133,7 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
     BOOL desired = ![prefs[@"findmy_daemons"] isKindOfClass:[NSNumber class]] || [prefs[@"findmy_daemons"] boolValue];
     NSNumber *observed = state[@"findmyRequested"];
     if (![observed isKindOfClass:[NSNumber class]] || [observed boolValue] != desired)
-        return @"Kontrol ediliyor…";
+        return [self cmRecentlyChanged] ? @"Kontrol ediliyor…" : @"Doğrulanamadı";
     id text = state[@"findmyStatus"];
     return [text isKindOfClass:[NSString class]] ? text : @"Bilinmiyor";
 }
@@ -145,8 +149,21 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
        [requested isKindOfClass:NSNumber.class] &&
        [requested boolValue] == [self cmEnabled];
 }
-- (BOOL)cmWaiting:(NSDictionary *)s {
+- (BOOL)cmRecentlyChanged {
+    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:CMPreferencesPath error:NULL];
+    NSDate *modified = attributes[NSFileModificationDate];
+    if (![modified isKindOfClass:[NSDate class]]) return NO;
+    return [[NSDate date] timeIntervalSinceDate:modified] < 12.0;
+}
+- (BOOL)cmUnconfirmed:(NSDictionary *)s {
     return ![self cmCurrent:s] || [s[@"phase"] isEqualToString:@"applying"];
+}
+- (BOOL)cmWaiting:(NSDictionary *)s {
+    if (![self cmUnconfirmed:s]) return NO;
+    if ([self cmRecentlyChanged]) return YES;
+    id stamp = s[@"updated"];
+    return [stamp isKindOfClass:[NSNumber class]] &&
+        ([[NSDate date] timeIntervalSince1970] - [stamp doubleValue] < 12.0);
 }
 - (NSString *)cmJob:(id)value {
     if (![value isKindOfClass:NSString.class]) return @"Bilinmiyor";
@@ -158,21 +175,25 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
 - (id)cmGetResult:(PSSpecifier *)specifier {
     NSDictionary *s = [self cmStatus];
     if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    if ([self cmUnconfirmed:s]) return @"Durum alınamadı";
     if ([s[@"verified"] boolValue])
         return [self cmEnabled] ? @"Açık — doğrulandı" : @"Kapalı — doğrulandı";
     return @"Doğrulanamadı";
 }
 - (id)cmGetEngine:(PSSpecifier *)specifier {
     NSDictionary *s = [self cmStatus];
-    return [self cmWaiting:s] ? @"Kontrol ediliyor…" : [self cmJob:s[@"engine"]];
+    if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    return [self cmUnconfirmed:s] ? @"Bilinmiyor" : [self cmJob:s[@"engine"]];
 }
 - (id)cmGetPanel:(PSSpecifier *)specifier {
     NSDictionary *s = [self cmStatus];
-    return [self cmWaiting:s] ? @"Kontrol ediliyor…" : [self cmJob:s[@"panel"]];
+    if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    return [self cmUnconfirmed:s] ? @"Bilinmiyor" : [self cmJob:s[@"panel"]];
 }
 - (id)cmGetProcesses:(PSSpecifier *)specifier {
     NSDictionary *s = [self cmStatus];
     if ([self cmWaiting:s]) return @"Kontrol ediliyor…";
+    if ([self cmUnconfirmed:s]) return @"Bilinmiyor";
     id n = s[@"pythonCount"];
     return [n isKindOfClass:NSNumber.class] ?
         [NSString stringWithFormat:@"%@ süreç", n] : @"Bilinmiyor";
@@ -180,6 +201,7 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
 - (id)cmGetDetails:(PSSpecifier *)specifier {
     NSDictionary *s = [self cmStatus];
     if ([self cmWaiting:s]) return @"Durum bekleniyor";
+    if ([self cmUnconfirmed:s]) return @"Kontrol sonucu okunamadı";
     id message = s[@"message"];
     return [message isKindOfClass:NSString.class] ? message : @"Bilinmiyor";
 }
