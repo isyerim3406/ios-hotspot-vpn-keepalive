@@ -27,6 +27,15 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
     [toggle setProperty:@YES forKey:@"default"];
     [items addObject:toggle];
 
+    PSSpecifier *findMyGroup = [PSSpecifier emptyGroupSpecifier];
+    [findMyGroup setProperty:@"Bu anahtar iOS Ayarlarındaki Bul özelliğini kapatmaz; yalnızca ilgili launchd servislerini kontrol eder. Kapalı durumda kayıp cihazın bulunması engellenebilir. Varsayılan: Açık." forKey:@"footerText"];
+    [items addObject:findMyGroup];
+    PSSpecifier *findMyToggle = [PSSpecifier preferenceSpecifierNamed:@"Find My daemonları aktif" target:self set:@selector(cmSetFindMy:specifier:) get:@selector(cmGetFindMy:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
+    [findMyToggle setProperty:@YES forKey:@"default"];
+    [items addObject:findMyToggle];
+    PSSpecifier *findMyStatus = [PSSpecifier preferenceSpecifierNamed:@"Find My servis sonucu" target:self set:nil get:@selector(cmGetFindMyStatus:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
+    [items addObject:findMyStatus];
+
     PSSpecifier *statusGroup = [PSSpecifier emptyGroupSpecifier];
     [statusGroup setProperty:@"Durum anahtar değerinden değil, root servisinin launchctl ve süreç kontrolünden okunur. Bilinmeyen durum doğrulanmış sayılmaz." forKey:@"footerText"];
     [items addObject:statusGroup];
@@ -76,7 +85,9 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
 
 - (void)cmSetEnabled:(id)value specifier:(PSSpecifier *)specifier {
     BOOL enabled = [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : NO;
-    NSDictionary *prefs = @{@"enabled": @(enabled), @"revision": [[NSUUID UUID] UUIDString]};
+    NSMutableDictionary *prefs = [[self cmPreferences] mutableCopy];
+    prefs[@"enabled"] = @(enabled);
+    prefs[@"revision"] = [[NSUUID UUID] UUIDString];
     if (![prefs writeToFile:CMPreferencesPath atomically:YES]) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ayar kaydedilemedi"
             message:@"Classic durumunu değiştiremedim. Anahtarı yeniden dene."
@@ -90,6 +101,37 @@ static NSString *const CMStatusPath = @"/var/mobile/classic-manual-status.plist"
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
         CFSTR("com.chatin.classicmanual/preferences.changed"), NULL, NULL, true);
     [self reloadSpecifiers];
+}
+
+- (id)cmGetFindMy:(PSSpecifier *)specifier {
+    id value = [self cmPreferences][@"findmy_daemons"];
+    return @(![value isKindOfClass:[NSNumber class]] || [value boolValue]);
+}
+- (void)cmSetFindMy:(id)value specifier:(PSSpecifier *)specifier {
+    BOOL desired = [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+    NSMutableDictionary *prefs = [[self cmPreferences] mutableCopy];
+    prefs[@"findmy_daemons"] = @(desired);
+    prefs[@"revision"] = [[NSUUID UUID] UUIDString];
+    if (![prefs writeToFile:CMPreferencesPath atomically:YES]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ayar kaydedilemedi"
+            message:@"Find My servisleri değiştirilmedi." preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Tamam" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    } else {
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+            CFSTR("com.chatin.classicmanual/preferences.changed"), NULL, NULL, true);
+    }
+    [self reloadSpecifiers];
+}
+- (id)cmGetFindMyStatus:(PSSpecifier *)specifier {
+    NSDictionary *prefs = [self cmPreferences];
+    NSDictionary *state = [self cmStatus];
+    BOOL desired = ![prefs[@"findmy_daemons"] isKindOfClass:[NSNumber class]] || [prefs[@"findmy_daemons"] boolValue];
+    NSNumber *observed = state[@"findmyRequested"];
+    if (![observed isKindOfClass:[NSNumber class]] || [observed boolValue] != desired)
+        return @"Kontrol ediliyor…";
+    id text = state[@"findmyStatus"];
+    return [text isKindOfClass:[NSString class]] ? text : @"Bilinmiyor";
 }
 
 - (BOOL)cmCurrent:(NSDictionary *)status {
