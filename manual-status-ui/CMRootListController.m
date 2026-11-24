@@ -40,15 +40,17 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
     PSSpecifier *findMyStatus = [PSSpecifier preferenceSpecifierNamed:@"Find My servis sonucu" target:self set:nil get:@selector(cmGetFindMyStatus:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
     [items addObject:findMyStatus];
     PSSpecifier *lpmGroup = [PSSpecifier emptyGroupSpecifier];
-    [lpmGroup setProperty:@"DUSUK GUC MODU — Baglanti 180 saniye yoksa acilir; tekrar baglaninca kapanir. Bagimsiz kontrol servisi; Classic ve Find My tercihlerini degistirmez." forKey:@"footerText"];
+    [lpmGroup setProperty:@"Bu anahtar Düşük Güç Modu’nu doğrudan açıp kapatmaz; bağlantıya göre otomasyonu etkinleştirir. Bağlantı varsa güç modu kapatılır, 180 saniye bağlantı yoksa açılır. Classic ve Find My bağımsızdır." forKey:@"footerText"];
     [items addObject:lpmGroup];
-    PSSpecifier *lpmSwitch = [PSSpecifier preferenceSpecifierNamed:@"Baglanti yokken Dusuk Guc Modu" target:self set:@selector(cmSetLPM:specifier:) get:@selector(cmGetLPM:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
+    PSSpecifier *lpmSwitch = [PSSpecifier preferenceSpecifierNamed:@"Otomatik Düşük Güç Modu" target:self set:@selector(cmSetLPM:specifier:) get:@selector(cmGetLPM:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
     [lpmSwitch setProperty:@NO forKey:@"default"];
     [items addObject:lpmSwitch];
     PSSpecifier *lpmStatus = [PSSpecifier preferenceSpecifierNamed:@"Dusuk Guc Modu sonucu" target:self set:nil get:@selector(cmGetLPMStatus:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
     [items addObject:lpmStatus];
     PSSpecifier *lpmActual = [PSSpecifier preferenceSpecifierNamed:@"Dusuk Guc Modu (gercek)" target:self set:nil get:@selector(cmGetLPMActual:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
     [items addObject:lpmActual];
+    PSSpecifier *lpmNetwork = [PSSpecifier preferenceSpecifierNamed:@"LPM bağlantı algısı" target:self set:nil get:@selector(cmGetLPMNetwork:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
+    [items addObject:lpmNetwork];
 
     PSSpecifier *statusGroup = [PSSpecifier emptyGroupSpecifier];
     [statusGroup setProperty:@"Durum anahtar değerinden değil, root servisinin launchctl ve süreç kontrolünden okunur. Bilinmeyen durum doğrulanmış sayılmaz." forKey:@"footerText"];
@@ -189,6 +191,7 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
 - (void)cmSetLPM:(id)value specifier:(PSSpecifier *)specifier {
     NSMutableDictionary *prefs = [[self cmLPMPrefs] mutableCopy];
     prefs[@"enabled"] = @([value respondsToSelector:@selector(boolValue)] && [value boolValue]);
+    prefs[@"revision"] = [[NSUUID UUID] UUIDString];
     if (![prefs writeToFile:CMLPMPrefsPath atomically:YES]) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ayar kaydedilemedi" message:@"Dusuk Guc Modu otomasyonu degistirilmedi." preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Tamam" style:UIAlertActionStyleDefault handler:nil]];
@@ -199,23 +202,50 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
     }
     [self reloadSpecifiers];
 }
+- (BOOL)cmLPMStatusIsFresh:(NSDictionary *)status {
+    id timestamp = status[@"lpmUpdated"];
+    return [timestamp isKindOfClass:[NSNumber class]] &&
+        ([[NSDate date] timeIntervalSince1970] - [timestamp doubleValue] < 120);
+}
+- (BOOL)cmLPMAcknowledged:(NSDictionary *)status {
+    NSDictionary *prefs=[self cmLPMPrefs];
+    id requested=prefs[@"enabled"];
+    id seen=status[@"lpmRequested"];
+    id revision=prefs[@"revision"];
+    id acknowledged=status[@"lpmRevision"];
+    if (![requested isKindOfClass:[NSNumber class]] || ![seen isKindOfClass:[NSNumber class]]) return NO;
+    if ([requested boolValue] != [seen boolValue]) return NO;
+    return ![revision isKindOfClass:[NSString class]] ||
+        ([acknowledged isKindOfClass:[NSString class]] && [revision isEqualToString:acknowledged]);
+}
 - (id)cmGetLPMStatus:(PSSpecifier *)specifier {
-    NSDictionary *status = [self cmLPMStatus];
-    id updated = status[@"lpmUpdated"];
-    if (![updated isKindOfClass:[NSNumber class]] ||
-         [[NSDate date] timeIntervalSince1970] - [updated doubleValue] > 240)
-        return @"Servis yaniti yok";
-    id state = status[@"lpmStatus"];
-    return [state isKindOfClass:[NSString class]] ? state : @"Henuz kontrol edilmedi";
+    NSDictionary *status=[self cmLPMStatus];
+    if (![self cmLPMStatusIsFresh:status]) return @"LPM servisi yanıt vermiyor";
+    if (![self cmLPMAcknowledged:status]) return @"Ayar henüz servise ulaşmadı";
+    if ([status[@"lpmPrefsValid"] isKindOfClass:[NSNumber class]] &&
+        ![status[@"lpmPrefsValid"] boolValue]) return @"LPM tercih dosyası okunamadı";
+    id message=status[@"lpmStatus"];
+    return [message isKindOfClass:[NSString class]] ? message : @"LPM sonucu alınamadı";
 }
 - (id)cmGetLPMActual:(PSSpecifier *)specifier {
-    NSDictionary *status = [self cmLPMStatus];
-    id updated = status[@"lpmUpdated"];
-    if (![updated isKindOfClass:[NSNumber class]] ||
-        [[NSDate date] timeIntervalSince1970] - [updated doubleValue] > 240)
-        return @"Dogrulanamadi";
-    id state = status[@"lpmActual"];
-    return [state isKindOfClass:[NSString class]] ? state : @"Dogrulanamadi";
+    NSDictionary *status=[self cmLPMStatus];
+    if (![self cmLPMStatusIsFresh:status] || ![status[@"lpmVerified"] boolValue])
+        return @"Doğrulanamadı";
+    id actual=status[@"lpmActual"];
+    return [actual isKindOfClass:[NSString class]] ? actual : @"Doğrulanamadı";
+}
+- (id)cmGetLPMNetwork:(PSSpecifier *)specifier {
+    NSDictionary *status=[self cmLPMStatus];
+    if (![self cmLPMStatusIsFresh:status]) return @"Servis yanıt vermiyor";
+    id code=status[@"lpmNetwork"];
+    if (![code isKindOfClass:[NSString class]]) return @"Bilinmiyor";
+    NSDictionary *names=@{
+        @"connected":@"Bağlı", @"empty":@"Bağlı cihaz yok",
+        @"off":@"Hotspot kapalı", @"on-unknown":@"Belirsiz (hotspot açık)",
+        @"unknown":@"Belirsiz", @"disabled":@"Otomasyon kapalı",
+        @"error":@"Kontrol hatası"
+    };
+    return names[code] ?: code;
 }
 
 - (BOOL)cmCurrent:(NSDictionary *)status {
