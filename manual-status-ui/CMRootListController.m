@@ -8,6 +8,9 @@
 static NSString *const CMPreferencesPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.plist";
 static NSString *const CMStatusPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.status.plist";
 static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-status.plist";
+static NSString *const CMLPMPrefsPath = @"/var/mobile/Library/Preferences/com.chatin.classiclpm.plist";
+static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.chatin.classiclpm.status.plist";
+
 
 @interface CMRootListController : PSListController
 @property (nonatomic, retain) NSTimer *cmStatusTimer;
@@ -19,7 +22,7 @@ static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-statu
     if (_specifiers) return _specifiers;
     NSMutableArray *items = [NSMutableArray array];
     PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-    [group setProperty:@"Orijinal Classic motoru değiştirilmez. Anahtara dokununca servislerin gerçek durumu kontrol edilir." forKey:@"footerText"];
+    [group setProperty:@"CLASSIC — Orijinal Classic motoru değiştirilmez. Manuel kontrol ve otomatik başlatma kendi kontrol servisiyle çalışır." forKey:@"footerText"];
     [items addObject:group];
     PSSpecifier *toggle = [PSSpecifier preferenceSpecifierNamed:@"Classic Aç / Kapat"
         target:self set:@selector(cmSetEnabled:specifier:)
@@ -29,7 +32,7 @@ static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-statu
     [items addObject:toggle];
 
     PSSpecifier *findMyGroup = [PSSpecifier emptyGroupSpecifier];
-    [findMyGroup setProperty:@"Bu anahtar iOS Ayarlarındaki Bul özelliğini kapatmaz; yalnızca ilgili launchd servislerini kontrol eder. Kapalı durumda kayıp cihazın bulunması engellenebilir. Varsayılan: Açık." forKey:@"footerText"];
+    [findMyGroup setProperty:@"FIND MY — Classic ve Düşük Güç Modu anahtarlarından bağımsızdır. İlgili launchd servislerini kontrol eder; kapatmak kayıp cihazın bulunmasını engelleyebilir. Varsayılan: Açık." forKey:@"footerText"];
     [items addObject:findMyGroup];
     PSSpecifier *findMyToggle = [PSSpecifier preferenceSpecifierNamed:@"Find My daemonları aktif" target:self set:@selector(cmSetFindMy:specifier:) get:@selector(cmGetFindMy:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
     [findMyToggle setProperty:@YES forKey:@"default"];
@@ -37,13 +40,15 @@ static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-statu
     PSSpecifier *findMyStatus = [PSSpecifier preferenceSpecifierNamed:@"Find My servis sonucu" target:self set:nil get:@selector(cmGetFindMyStatus:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
     [items addObject:findMyStatus];
     PSSpecifier *lpmGroup = [PSSpecifier emptyGroupSpecifier];
-    [lpmGroup setProperty:@"Baglanti 180 saniye yoksa o anki Dusuk Guc Modu durumu kaydedilir ve mod acilir. Baglanti donunce kaydedilen ilk durum geri yuklenir." forKey:@"footerText"];
+    [lpmGroup setProperty:@"DUSUK GUC MODU — Baglanti 180 saniye yoksa acilir; tekrar baglaninca kapanir. Bagimsiz kontrol servisi; Classic ve Find My tercihlerini degistirmez." forKey:@"footerText"];
     [items addObject:lpmGroup];
     PSSpecifier *lpmSwitch = [PSSpecifier preferenceSpecifierNamed:@"Baglanti yokken Dusuk Guc Modu" target:self set:@selector(cmSetLPM:specifier:) get:@selector(cmGetLPM:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
     [lpmSwitch setProperty:@NO forKey:@"default"];
     [items addObject:lpmSwitch];
     PSSpecifier *lpmStatus = [PSSpecifier preferenceSpecifierNamed:@"Dusuk Guc Modu sonucu" target:self set:nil get:@selector(cmGetLPMStatus:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
     [items addObject:lpmStatus];
+    PSSpecifier *lpmActual = [PSSpecifier preferenceSpecifierNamed:@"Dusuk Guc Modu (gercek)" target:self set:nil get:@selector(cmGetLPMActual:) detail:nil cell:[PSTableCell cellTypeFromString:@"PSTitleValueCell"] edit:nil];
+    [items addObject:lpmActual];
 
     PSSpecifier *statusGroup = [PSSpecifier emptyGroupSpecifier];
     [statusGroup setProperty:@"Durum anahtar değerinden değil, root servisinin launchctl ve süreç kontrolünden okunur. Bilinmeyen durum doğrulanmış sayılmaz." forKey:@"footerText"];
@@ -147,28 +152,48 @@ static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-statu
 }
 
 
+- (NSDictionary *)cmLPMPrefs {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:CMLPMPrefsPath];
+    return [prefs isKindOfClass:[NSDictionary class]] ? prefs : @{};
+}
+- (NSDictionary *)cmLPMStatus {
+    NSDictionary *status = [NSDictionary dictionaryWithContentsOfFile:CMLPMStatusPath];
+    return [status isKindOfClass:[NSDictionary class]] ? status : @{};
+}
 - (id)cmGetLPM:(PSSpecifier *)specifier {
-    id n = [self cmPreferences][@"lpmAutoEnabled"];
+    id n = [self cmLPMPrefs][@"enabled"];
     return @([n isKindOfClass:[NSNumber class]] && [n boolValue]);
 }
 - (void)cmSetLPM:(id)value specifier:(PSSpecifier *)specifier {
-    NSMutableDictionary *prefs = [[self cmPreferences] mutableCopy];
-    prefs[@"lpmAutoEnabled"] = @([value respondsToSelector:@selector(boolValue)] && [value boolValue]);
-    prefs[@"revision"] = [[NSUUID UUID] UUIDString];
-    if (![prefs writeToFile:CMPreferencesPath atomically:YES]) {
+    NSMutableDictionary *prefs = [[self cmLPMPrefs] mutableCopy];
+    prefs[@"enabled"] = @([value respondsToSelector:@selector(boolValue)] && [value boolValue]);
+    if (![prefs writeToFile:CMLPMPrefsPath atomically:YES]) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ayar kaydedilemedi" message:@"Dusuk Guc Modu otomasyonu degistirilmedi." preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Tamam" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-            CFSTR("com.chatin.classicmanual/preferences.changed"), NULL, NULL, true);
+            CFSTR("com.chatin.classiclpm/preferences.changed"), NULL, NULL, true);
     }
     [self reloadSpecifiers];
 }
 - (id)cmGetLPMStatus:(PSSpecifier *)specifier {
-    NSDictionary *status = [self cmStatus];
+    NSDictionary *status = [self cmLPMStatus];
+    id updated = status[@"lpmUpdated"];
+    if (![updated isKindOfClass:[NSNumber class]] ||
+         [[NSDate date] timeIntervalSince1970] - [updated doubleValue] > 240)
+        return @"Servis yaniti yok";
     id state = status[@"lpmStatus"];
     return [state isKindOfClass:[NSString class]] ? state : @"Henuz kontrol edilmedi";
+}
+- (id)cmGetLPMActual:(PSSpecifier *)specifier {
+    NSDictionary *status = [self cmLPMStatus];
+    id updated = status[@"lpmUpdated"];
+    if (![updated isKindOfClass:[NSNumber class]] ||
+        [[NSDate date] timeIntervalSince1970] - [updated doubleValue] > 240)
+        return @"Dogrulanamadi";
+    id state = status[@"lpmActual"];
+    return [state isKindOfClass:[NSString class]] ? state : @"Dogrulanamadi";
 }
 
 - (BOOL)cmCurrent:(NSDictionary *)status {
