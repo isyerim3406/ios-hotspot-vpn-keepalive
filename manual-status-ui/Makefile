@@ -9,3 +9,9 @@ ClassicManual_PRIVATE_FRAMEWORKS = Preferences
 ClassicManual_INSTALL_PATH = /Library/PreferenceBundles
 ClassicManual_CFLAGS = -fobjc-arc
 include $(THEOS_MAKE_PATH)/bundle.mk
+TOOL_NAME = classic-lpm
+classic-lpm_FILES = classic-lpm.m
+classic-lpm_FRAMEWORKS = Foundation
+classic-lpm_INSTALL_PATH = /usr/local/bin
+classic-lpm_CFLAGS = -fobjc-arc
+include $(THEOS_MAKE_PATH)/tool.mk
