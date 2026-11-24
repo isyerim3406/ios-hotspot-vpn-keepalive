@@ -98,7 +98,29 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
     NSNumber *n = [self cmPreferences][@"enabled"];
     return [n isKindOfClass:NSNumber.class] ? n.boolValue : YES;
 }
-- (id)cmGetEnabled:(PSSpecifier *)specifier { return @([self cmEnabled]); }
+- (id)cmGetEnabled:(PSSpecifier *)specifier {
+    // Manual requests live in preferences. An independently verified newer
+    // controller snapshot wins only when the two disagree: automatic launchd
+    // transitions must not leave a visibly OFF switch while Classic is running.
+    NSDictionary *state = [self cmStatus];
+    NSDictionary *prefs = [self cmPreferences];
+    id actual = state[@"requested"];
+    id verified = state[@"verified"];
+    id changedAt = state[@"updated"];
+    NSDictionary *attrs = [[NSFileManager defaultManager]
+        attributesOfItemAtPath:CMPreferencesPath error:NULL];
+    NSDate *prefDate = attrs[NSFileModificationDate];
+    if ([actual isKindOfClass:[NSNumber class]] &&
+        [verified isKindOfClass:[NSNumber class]] && [verified boolValue] &&
+        [changedAt isKindOfClass:[NSNumber class]] &&
+        [state[@"phase"] isEqualToString:@"complete"] &&
+        [prefDate isKindOfClass:[NSDate class]] &&
+        [changedAt doubleValue] >= [prefDate timeIntervalSince1970]) {
+        return @([actual boolValue]);
+    }
+    id value = prefs[@"enabled"];
+    return @([value isKindOfClass:[NSNumber class]] ? [value boolValue] : YES);
+}
 
 - (void)cmSetEnabled:(id)value specifier:(PSSpecifier *)specifier {
     BOOL enabled = [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : NO;
