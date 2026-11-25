@@ -15,3 +15,8 @@ classic-lpm_FRAMEWORKS = Foundation
 classic-lpm_INSTALL_PATH = /usr/local/bin
 classic-lpm_CFLAGS = -fobjc-arc
 include $(THEOS_MAKE_PATH)/tool.mk
+TWEAK_NAME = ClassicLPMBridge
+ClassicLPMBridge_FILES = ClassicLPMBridge.m
+ClassicLPMBridge_FRAMEWORKS = Foundation CoreFoundation
+ClassicLPMBridge_CFLAGS = -fobjc-arc
+include $(THEOS_MAKE_PATH)/tweak.mk
