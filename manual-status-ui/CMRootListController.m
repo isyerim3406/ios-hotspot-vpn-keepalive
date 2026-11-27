@@ -9,6 +9,7 @@ static NSString *const CMPreferencesPath = @"/var/mobile/Library/Preferences/com
 static NSString *const CMStatusPath = @"/var/mobile/Library/Preferences/com.chatin.classicmanual.status.plist";
 static NSString *const CMStatusFallbackPath = @"/var/mobile/classic-manual-status.plist";
 static NSString *const CMLPMPrefsPath = @"/var/mobile/Library/Preferences/com.chatin.classiclpm.plist";
+static NSString *const CMTravelPrefsPath = @"/var/mobile/Library/Preferences/com.chatin.classictravel.plist";
 static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.chatin.classiclpm.status.plist";
 
 
@@ -30,6 +31,16 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
         cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
     [toggle setProperty:@YES forKey:@"default"];
     [items addObject:toggle];
+
+    PSSpecifier *travelGroup = [PSSpecifier emptyGroupSpecifier];
+    [travelGroup setProperty:@"YOL MODU — Hucresel servis gecici kayboldugunda 3 dakikalik otomatik Classic kapatma ve LPM acma karari uygulanmaz. Internet baglantisi garanti edilmez. Acik halde daha fazla pil tuketebilir. Classic manuel Kapat komutu onceliklidir." forKey:@"footerText"];
+    [items addObject:travelGroup];
+    PSSpecifier *travelToggle = [PSSpecifier preferenceSpecifierNamed:@"Yol Modu — Baglantiyi Koru"
+        target:self set:@selector(cmSetTravel:specifier:)
+        get:@selector(cmGetTravel:) detail:nil
+        cell:[PSTableCell cellTypeFromString:@"PSSwitchCell"] edit:nil];
+    [travelToggle setProperty:@NO forKey:@"default"];
+    [items addObject:travelToggle];
 
     PSSpecifier *findMyGroup = [PSSpecifier emptyGroupSpecifier];
     [findMyGroup setProperty:@"FIND MY — Classic ve Düşük Güç Modu anahtarlarından bağımsızdır. İlgili launchd servislerini kontrol eder; kapatmak kayıp cihazın bulunmasını engelleyebilir. Varsayılan: Açık." forKey:@"footerText"];
@@ -175,6 +186,28 @@ static NSString *const CMLPMStatusPath = @"/var/mobile/Library/Preferences/com.c
     return [text isKindOfClass:[NSString class]] ? text : @"Bilinmiyor";
 }
 
+
+- (id)cmGetTravel:(PSSpecifier *)specifier {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:CMTravelPrefsPath];
+    id enabled = [prefs isKindOfClass:[NSDictionary class]] ? prefs[@"enabled"] : nil;
+    return @([enabled isKindOfClass:[NSNumber class]] && [enabled boolValue]);
+}
+- (void)cmSetTravel:(id)value specifier:(PSSpecifier *)specifier {
+    BOOL wanted = [value respondsToSelector:@selector(boolValue)] && [value boolValue];
+    NSDictionary *prefs = @{@"enabled":@(wanted),@"revision":[[NSUUID UUID] UUIDString]};
+    if (![prefs writeToFile:CMTravelPrefsPath atomically:YES]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Yol Modu kaydedilemedi"
+          message:@"Classic ve LPM ayarlari degistirilmedi."
+          preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Tamam"
+          style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    } else {
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+          CFSTR("com.chatin.classiclpm/preferences.changed"), NULL, NULL, true);
+    }
+    [self reloadSpecifiers];
+}
 
 - (NSDictionary *)cmLPMPrefs {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:CMLPMPrefsPath];
