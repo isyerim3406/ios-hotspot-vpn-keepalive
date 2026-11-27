@@ -101,8 +101,8 @@ def mode():
       "Independent LPM worker v2.10.1 SpringBoard bridge",
       "Independent LPM worker v2.11.0 travel guard")
     s=replace_once(s,
-'''            enabled=lpm_auto_enabled(preference)
-            network=hotspot_connection_state() if enabled else 'disabled''',
+"""            enabled=lpm_auto_enabled(preference)
+            network=hotspot_connection_state() if enabled else 'disabled'""",
 '''            enabled=lpm_auto_enabled(preference)
             road_mode=travel_mode_enabled() and classic_requested()
             # The road-mode override prevents a temporary cellular outage
