@@ -17,7 +17,7 @@ BEFORE = "444225b83d2edd5419a7080e40520564af4dacb0b932d113e43d36fcad289bcd"
 AFTER = "b2fd18568b9ec28cfaea2eb74203a4d5226e5d98766ec42f68d0aa3e0f3f2923"
 
 NEW_NETWORK_FUNCTION = """def hotspot_connection_state():
-    \\"\\"\\"Low Power automation observes hotspot service state, not Wi-Fi peers.
+    \"\"\"Low Power automation observes hotspot service state, not Wi-Fi peers.
 
     MIS=1 is positive evidence of active sharing, regardless of client count.
     MIS=0 must remain uninterrupted for 180 seconds before LPM is enabled.
@@ -25,7 +25,7 @@ NEW_NETWORK_FUNCTION = """def hotspot_connection_state():
     In particular do NOT open probe sockets, read ARP or query Hosts.Current.
 
     Note: MIS state is not the Settings 'Allow Others to Join' switch state.
-    \\"\\"\\"
+    \"\"\"
     if not (os.path.isfile(MISCTL_PATH) and os.access(MISCTL_PATH, os.X_OK)):
         print('LPM NETWORK: misctl unavailable => unknown', flush=True)
         return 'unknown'
